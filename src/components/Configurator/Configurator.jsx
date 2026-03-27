@@ -744,6 +744,7 @@ const Configurator = () => {
           grid-template-columns: 350px 1fr;
           gap: 2rem;
           height: 700px;
+          overflow: hidden;
         }
 
         .controls {
@@ -752,6 +753,8 @@ const Configurator = () => {
           flex-direction: column;
           gap: 2rem;
           height: 100%;
+          overflow-y: auto;
+          box-sizing: border-box;
         }
 
         .control-group label {
