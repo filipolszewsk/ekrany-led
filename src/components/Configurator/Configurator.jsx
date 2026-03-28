@@ -352,6 +352,11 @@ const Configurator = () => {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
+  // Auto-fit when modules change (e.g. after adding)
+  useEffect(() => {
+    fitToScreen();
+  }, [modules.length]);
+
   const areTouching = (m1, m2) => {
     const b1 = getModuleBounds(m1);
     const b2 = getModuleBounds(m2);
@@ -549,14 +554,16 @@ const Configurator = () => {
               onPointerLeave={() => setIsPanning(false)}
               onPointerCancel={() => setIsPanning(false)}
             >
-              <div
-                ref={workbenchRef}
-                className={`grid-canvas ${isGridVisible ? 'grid-on' : ''}`}
-                style={{
-                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                  transformOrigin: '0 0',
-                }}
-              >
+              {/* Pan translate wrapper - outside Framer so drag offsets stay correct */}
+              <div style={{ position: 'absolute', top: 0, left: 0, transform: `translate(${pan.x}px, ${pan.y}px)` }}>
+                {/* Framer controls scale so drag offset math is correct */}
+                <motion.div
+                  ref={workbenchRef}
+                  className={`grid-canvas ${isGridVisible ? 'grid-on' : ''}`}
+                  animate={{ scale: zoom }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  style={{ originX: 0, originY: 0, width: '8000px', height: '8000px' }}
+                >
                 <AnimatePresence>
                 {modules.map((module) => (
                   <motion.div
@@ -707,6 +714,7 @@ const Configurator = () => {
                   <p>Twój obszar roboczy jest pusty.<br/>Dodaj pierwszy moduł, aby zacząć.</p>
                 </div>
               )}
+              </motion.div>
               </div>
             </div>
             
