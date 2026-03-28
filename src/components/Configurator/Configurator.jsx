@@ -540,7 +540,6 @@ const Configurator = () => {
                 setSelectedIds([]);
                 setIsPanning(true);
                 panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-                e.currentTarget.setPointerCapture(e.pointerId);
               }}
               onPointerMove={(e) => {
                 if (!isPanning) return;
