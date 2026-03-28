@@ -8,6 +8,10 @@ const Configurator = () => {
   const [isGridVisible, setIsGridVisible] = useState(true);
   const [dragGhost, setDragGhost] = useState(null);
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef({ x: 0, y: 0 });
+  const workbenchContainerRef = useRef(null);
   const [addCols, setAddCols] = useState(1);
   const [addRows, setAddRows] = useState(1);
   const [addOrientation, setAddOrientation] = useState('horizontal');
@@ -303,37 +307,50 @@ const Configurator = () => {
   };
 
   const fitToScreen = () => {
-    if (modules.length === 0 || !workbenchRef.current) return;
-    
-    const container = workbenchRef.current.parentElement;
-    const viewW = container.clientWidth;
-    const viewH = container.clientHeight;
-    
-    let maxR = 0;
-    let maxB = 0;
-    
+    if (!workbenchContainerRef.current) return;
+    const { clientWidth: viewW, clientHeight: viewH } = workbenchContainerRef.current;
+    if (modules.length === 0) {
+      setZoom(1);
+      setPan({ x: viewW / 2, y: viewH / 2 });
+      return;
+    }
+    let minX = Infinity, minY = Infinity, maxR = -Infinity, maxB = -Infinity;
     modules.forEach(m => {
       const b = getModuleBounds(m);
+      if (b.x < minX) minX = b.x;
+      if (b.y < minY) minY = b.y;
       if (b.x + b.w > maxR) maxR = b.x + b.w;
       if (b.y + b.h > maxB) maxB = b.y + b.h;
     });
-
-    const requiredW = maxR + 100;
-    const requiredH = maxB + 100;
-    
-    const requiredScaleX = viewW / requiredW;
-    const requiredScaleY = viewH / requiredH;
-    
-    const neededScale = Math.min(1, requiredScaleX, requiredScaleY);
-    const targetZoom = Math.max(0.01, (Math.floor(neededScale * 100) / 100));
-    
-    setZoom(targetZoom);
+    const padding = 80;
+    const newZoom = Math.max(0.05, Math.min(1, (viewW - padding * 2) / (maxR - minX), (viewH - padding * 2) / (maxB - minY)));
+    const cx = (minX + maxR) / 2;
+    const cy = (minY + maxB) / 2;
+    setZoom(newZoom);
+    setPan({ x: viewW / 2 - cx * newZoom, y: viewH / 2 - cy * newZoom });
   };
 
+  // Init: center canvas + wheel zoom (passive:false required)
   useEffect(() => {
-    if (modules.length === 0 || !workbenchRef.current) return;
-    fitToScreen();
-  }, [modules]);
+    const el = workbenchContainerRef.current;
+    if (!el) return;
+    setPan({ x: el.clientWidth / 2, y: el.clientHeight / 2 });
+    const onWheel = (e) => {
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 0.92 : 1.08;
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      setZoom(prevZoom => {
+        const newZoom = Math.min(3, Math.max(0.05, prevZoom * factor));
+        const sf = newZoom / prevZoom;
+        setPan(p => ({ x: mouseX - (mouseX - p.x) * sf, y: mouseY - (mouseY - p.y) * sf }));
+        return newZoom;
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   const areTouching = (m1, m2) => {
     const b1 = getModuleBounds(m1);
@@ -514,17 +531,31 @@ const Configurator = () => {
           </div>
 
           <div className="workbench-container">
-            <div className="workbench">
-              <motion.div 
-                ref={workbenchRef} 
+            <div
+              ref={workbenchContainerRef}
+              className="workbench"
+              style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+              onPointerDown={(e) => {
+                if (e.target.closest('.module-item')) return;
+                setSelectedIds([]);
+                setIsPanning(true);
+                panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+                e.currentTarget.setPointerCapture(e.pointerId);
+              }}
+              onPointerMove={(e) => {
+                if (!isPanning) return;
+                setPan({ x: e.clientX - panStartRef.current.x, y: e.clientY - panStartRef.current.y });
+              }}
+              onPointerUp={() => setIsPanning(false)}
+              onPointerLeave={() => setIsPanning(false)}
+              onPointerCancel={() => setIsPanning(false)}
+            >
+              <div
+                ref={workbenchRef}
                 className={`grid-canvas ${isGridVisible ? 'grid-on' : ''}`}
-                animate={{ scale: zoom }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                style={{ originX: 0, originY: 0, width: `${100/zoom}%`, height: `${100/zoom}%` }}
-                onPointerDown={(e) => {
-                  if (e.target === workbenchRef.current) {
-                    setSelectedIds([]);
-                  }
+                style={{
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transformOrigin: '0 0',
                 }}
               >
                 <AnimatePresence>
@@ -563,7 +594,7 @@ const Configurator = () => {
                       let isValid = true;
                       for (const m of groupMods) {
                         const moved = { ...m, x: m.x + dx, y: m.y + dy };
-                        if (moved.x < 0 || moved.y < 0 || isColliding(moved, unselectedMods)) {
+                        if (isColliding(moved, unselectedMods)) {
                           isValid = false;
                           break;
                         }
@@ -677,7 +708,7 @@ const Configurator = () => {
                   <p>Twój obszar roboczy jest pusty.<br/>Dodaj pierwszy moduł, aby zacząć.</p>
                 </div>
               )}
-              </motion.div>
+              </div>
             </div>
             
             <div className="workbench-footer">
@@ -918,12 +949,15 @@ const Configurator = () => {
           overflow: hidden;
           padding: 0;
           display: block;
+          user-select: none;
         }
 
         .grid-canvas {
           position: absolute;
           top: 0;
           left: 0;
+          width: 8000px;
+          height: 8000px;
         }
 
         .grid-canvas.grid-on {
