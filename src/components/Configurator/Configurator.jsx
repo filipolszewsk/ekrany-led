@@ -844,23 +844,16 @@ const Configurator = () => {
                     }}
                     onPointerDown={(e) => {
                       const isMultiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
-                      const targetPlasterId = module.plasterId;
                       
-                      const siblingIds = targetPlasterId 
-                        ? modules.filter(m => m.plasterId === targetPlasterId).map(m => m.id)
-                        : [module.id];
-                        
                       if (isMultiSelect) {
-                        const anySelected = siblingIds.some(id => selectedIds.includes(id));
-                        if (anySelected) {
-                          setSelectedIds(prev => prev.filter(id => !siblingIds.includes(id)));
+                        if (selectedIds.includes(module.id)) {
+                          setSelectedIds(prev => prev.filter(id => id !== module.id));
                         } else {
-                          setSelectedIds(prev => [...prev, ...siblingIds]);
+                          setSelectedIds(prev => [...prev, module.id]);
                         }
                       } else {
-                        const isAlreadySelected = siblingIds.every(id => selectedIds.includes(id));
-                        if (!isAlreadySelected) {
-                          setSelectedIds(siblingIds);
+                        if (!selectedIds.includes(module.id)) {
+                          setSelectedIds([module.id]);
                         }
                       }
                       moduleJustAddedRef.current = module.id;
@@ -874,11 +867,7 @@ const Configurator = () => {
                       if (moduleJustAddedRef.current === module.id) {
                          moduleJustAddedRef.current = null;
                       } else {
-                         const targetPlasterId = module.plasterId;
-                         const siblingIds = targetPlasterId 
-                           ? modules.filter(m => m.plasterId === targetPlasterId).map(m => m.id)
-                           : [module.id];
-                         setSelectedIds(prev => prev.filter(id => !siblingIds.includes(id)));
+                         setSelectedIds(prev => prev.filter(id => id !== module.id));
                       }
                     }}
                     className={`module-item ${selectedIds.includes(module.id) ? 'selected' : ''}`}
