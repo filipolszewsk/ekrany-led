@@ -200,6 +200,10 @@ const Configurator = () => {
       const moduleWidth = isAddRotated ? dims.heightPx : dims.widthPx;
       const moduleHeight = isAddRotated ? dims.widthPx : dims.heightPx;
 
+      if (!moduleWidth || !moduleHeight || isNaN(moduleWidth) || isNaN(moduleHeight) || moduleWidth <= 0 || moduleHeight <= 0) {
+        return prev;
+      }
+
       const gridTotalWidth = addCols * moduleWidth;
       const gridTotalHeight = addRows * moduleHeight;
 
@@ -506,13 +510,21 @@ const Configurator = () => {
   };
 
   const getAspectRatio = (w, h) => {
-    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-    const d = gcd(w, h);
-    if (d === 0) return '';
-    const rw = w/d;
-    const rh = h/d;
-    // Limit displaying huge weird ratios by also showing decimal
-    if (rw > 100 || rh > 100) return `${(w/h).toFixed(2)}:1`;
+    const wi = Math.round(w);
+    const hi = Math.round(h);
+    if (!wi || !hi || isNaN(wi) || isNaN(hi) || !isFinite(wi) || !isFinite(hi) || wi <= 0 || hi <= 0) return '';
+    
+    const gcd = (a, b) => {
+      if (isNaN(b) || !isFinite(b) || b <= 0) return a;
+      return gcd(b, a % b);
+    };
+    
+    const d = gcd(wi, hi);
+    if (!d || isNaN(d) || !isFinite(d) || d <= 0) return '';
+    
+    const rw = wi / d;
+    const rh = hi / d;
+    if (rw > 100 || rh > 100) return `${(wi / hi).toFixed(2)}:1`;
     return `${rw}:${rh}`;
   };
 
