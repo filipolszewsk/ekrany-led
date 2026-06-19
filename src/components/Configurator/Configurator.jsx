@@ -510,16 +510,16 @@ const Configurator = () => {
       const heightPx = maxB - minY;
       const pp = cluster[0]?.config?.pixelPitch || cabinetConfig.pixelPitch;
       
-      const widthCm = Math.round(widthPx / CM_TO_PX);
-      const heightCm = Math.round(heightPx / CM_TO_PX);
+      const widthCm = parseFloat((widthPx / CM_TO_PX).toFixed(1));
+      const heightCm = parseFloat((heightPx / CM_TO_PX).toFixed(1));
       
       return {
         id: index + 1,
         count: cluster.length,
         widthCm,
         heightCm,
-        resW: Math.round(widthCm * 10 / pp),
-        resH: Math.round(heightCm * 10 / pp),
+        resW: Math.round((widthPx / CM_TO_PX) * 10 / pp),
+        resH: Math.round((heightPx / CM_TO_PX) * 10 / pp),
         pp
       };
     }).sort((a,b) => b.count - a.count);
