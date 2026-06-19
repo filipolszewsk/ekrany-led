@@ -734,6 +734,9 @@ const Configurator = () => {
                       const unselectedMods = modules.filter(m => !curSelected.includes(m.id));
                       const groupMods = modules.filter(m => curSelected.includes(m.id));
                       
+                      // Pre-calculate bounds of unselected modules to avoid redundant calls in nested loops
+                      const unselectedBounds = unselectedMods.map(oMod => getModuleBounds(oMod));
+                      
                       // Magnetic Snapping
                       const SNAP_DIST = 20; // px
                       let minDx = SNAP_DIST;
@@ -744,9 +747,7 @@ const Configurator = () => {
                       for (const dMod of groupMods) {
                         const dBounds = getModuleBounds({ ...dMod, x: dMod.x + rawDx, y: dMod.y + rawDy });
                         
-                        for (const oMod of unselectedMods) {
-                          const oBounds = getModuleBounds(oMod);
-                          
+                        for (const oBounds of unselectedBounds) {
                           const dxOptions = [
                             oBounds.x - (dBounds.x + dBounds.w),
                             (oBounds.x + oBounds.w) - dBounds.x,
@@ -783,16 +784,31 @@ const Configurator = () => {
                       
                       let isValid = true;
                       for (const m of groupMods) {
-                        const moved = { ...m, x: m.x + finalDx, y: m.y + finalDy };
-                        if (isColliding(moved, unselectedMods)) {
+                        const mBounds = getModuleBounds({ ...m, x: m.x + finalDx, y: m.y + finalDy });
+                        
+                        const collides = unselectedBounds.some(b => {
+                          const EPSILON = 0.5;
+                          return !(
+                            mBounds.x + mBounds.w - EPSILON <= b.x ||
+                            mBounds.x + EPSILON >= b.x + b.w ||
+                            mBounds.y + mBounds.h - EPSILON <= b.y ||
+                            mBounds.y + EPSILON >= b.y + b.h
+                          );
+                        });
+                        
+                        if (collides) {
                           isValid = false;
                           break;
                         }
                       }
                       
-                      const dg = { dx: finalDx, dy: finalDy, valid: isValid };
-                      dragGroupRef.current = dg;
-                      setDragGroup(dg);
+                      // Only trigger React state update if the snapped coordinates or validity actually changed
+                      const prevDg = dragGroupRef.current;
+                      if (!prevDg || prevDg.dx !== finalDx || prevDg.dy !== finalDy || prevDg.valid !== isValid) {
+                        const dg = { dx: finalDx, dy: finalDy, valid: isValid };
+                        dragGroupRef.current = dg;
+                        setDragGroup(dg);
+                      }
                     }}
                     onDragEnd={(e, info) => {
                       setTimeout(() => { isDraggingRef.current = false; }, 100);
