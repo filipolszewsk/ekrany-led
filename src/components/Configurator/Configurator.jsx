@@ -514,6 +514,8 @@ const Configurator = () => {
     const hi = Math.round(h);
     if (!wi || !hi || isNaN(wi) || isNaN(hi) || !isFinite(wi) || !isFinite(hi) || wi <= 0 || hi <= 0) return '';
     
+    const decimal = (wi / hi).toFixed(3);
+    
     const gcd = (a, b) => {
       if (isNaN(b) || !isFinite(b) || b <= 0) return a;
       return gcd(b, a % b);
@@ -524,8 +526,8 @@ const Configurator = () => {
     
     const rw = wi / d;
     const rh = hi / d;
-    if (rw > 100 || rh > 100) return `${(wi / hi).toFixed(2)}:1`;
-    return `${rw}:${rh}`;
+    if (rw > 100 || rh > 100) return `${(wi / hi).toFixed(2)}:1 (${decimal})`;
+    return `${rw}:${rh} (${decimal})`;
   };
 
   return (
