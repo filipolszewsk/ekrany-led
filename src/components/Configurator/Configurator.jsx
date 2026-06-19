@@ -131,14 +131,16 @@ const Configurator = () => {
        finalHeight = isRot ? dims.widthPx : dims.heightPx;
     }
 
+    const EPSILON = 0.5; // Tolerancja dla błędów zmiennoprzecinkowych
+
     return existingModules.some(mod => {
       if (mod.id === newModBounds.id && !newModBounds.isGridBlock) return false;
       const b = getModuleBounds(mod);
       return !(
-        newModBounds.x + finalWidth <= b.x ||
-        newModBounds.x >= b.x + b.w ||
-        newModBounds.y + finalHeight <= b.y ||
-        newModBounds.y >= b.y + b.h
+        newModBounds.x + finalWidth - EPSILON <= b.x ||
+        newModBounds.x + EPSILON >= b.x + b.w ||
+        newModBounds.y + finalHeight - EPSILON <= b.y ||
+        newModBounds.y + EPSILON >= b.y + b.h
       );
     });
   };
@@ -707,12 +709,17 @@ const Configurator = () => {
                         }
                       }
 
-                      if (Math.abs(minDx) < SNAP_DIST) finalDx += bestDx;
-                      if (Math.abs(minDy) < SNAP_DIST) finalDy += bestDy;
-                      
-                      // Snap to minimal grid to avoid floating point issues
-                      finalDx = Math.round(finalDx / GRID_SIZE) * GRID_SIZE;
-                      finalDy = Math.round(finalDy / GRID_SIZE) * GRID_SIZE;
+                      if (Math.abs(minDx) < SNAP_DIST) {
+                        finalDx += bestDx;
+                      } else {
+                        finalDx = Math.round(finalDx / GRID_SIZE) * GRID_SIZE;
+                      }
+
+                      if (Math.abs(minDy) < SNAP_DIST) {
+                        finalDy += bestDy;
+                      } else {
+                        finalDy = Math.round(finalDy / GRID_SIZE) * GRID_SIZE;
+                      }
                       
                       let isValid = true;
                       for (const m of groupMods) {
