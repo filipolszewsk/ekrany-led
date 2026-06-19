@@ -889,7 +889,7 @@ const Configurator = () => {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .configurator {
           padding: 100px 0;
           background: #080808;

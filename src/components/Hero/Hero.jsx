@@ -63,7 +63,7 @@ const Hero = () => {
         </motion.div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .hero {
           padding: 180px 0 100px;
           position: relative;

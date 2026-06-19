@@ -22,7 +22,7 @@ const Header = () => {
         </nav>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .header {
           position: fixed;
           top: 0;

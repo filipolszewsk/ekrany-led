@@ -18,7 +18,7 @@ function App() {
         </div>
       </footer>
 
-      <style jsx>{`
+      <style>{`
         .app {
           min-height: 100vh;
         }
