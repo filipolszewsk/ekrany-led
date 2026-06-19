@@ -650,25 +650,67 @@ const Configurator = () => {
                       const curSelected = selectedIdsRef.current;
                       if (!curSelected.includes(module.id)) return;
                       
-                      const newX = Math.round((module.x + (info.offset.x / zoom)) / GRID_SIZE) * GRID_SIZE;
-                      const newY = Math.round((module.y + (info.offset.y / zoom)) / GRID_SIZE) * GRID_SIZE;
+                      const rawDx = info.offset.x / zoom;
+                      const rawDy = info.offset.y / zoom;
                       
-                      const dx = newX - module.x;
-                      const dy = newY - module.y;
+                      let finalDx = rawDx;
+                      let finalDy = rawDy;
                       
                       const unselectedMods = modules.filter(m => !curSelected.includes(m.id));
                       const groupMods = modules.filter(m => curSelected.includes(m.id));
                       
+                      // Magnetic Snapping
+                      const SNAP_DIST = 20; // px
+                      let minDx = SNAP_DIST;
+                      let minDy = SNAP_DIST;
+                      let bestDx = 0;
+                      let bestDy = 0;
+
+                      for (const dMod of groupMods) {
+                        const dBounds = getModuleBounds({ ...dMod, x: dMod.x + rawDx, y: dMod.y + rawDy });
+                        
+                        for (const oMod of unselectedMods) {
+                          const oBounds = getModuleBounds(oMod);
+                          
+                          const dxOptions = [
+                            oBounds.x - (dBounds.x + dBounds.w),
+                            (oBounds.x + oBounds.w) - dBounds.x,
+                            oBounds.x - dBounds.x,
+                            (oBounds.x + oBounds.w) - (dBounds.x + dBounds.w)
+                          ];
+                          for (const dx of dxOptions) {
+                            if (Math.abs(dx) < Math.abs(minDx)) { minDx = dx; bestDx = dx; }
+                          }
+
+                          const dyOptions = [
+                            oBounds.y - (dBounds.y + dBounds.h),
+                            (oBounds.y + oBounds.h) - dBounds.y,
+                            oBounds.y - dBounds.y,
+                            (oBounds.y + oBounds.h) - (dBounds.y + dBounds.h)
+                          ];
+                          for (const dy of dyOptions) {
+                            if (Math.abs(dy) < Math.abs(minDy)) { minDy = dy; bestDy = dy; }
+                          }
+                        }
+                      }
+
+                      if (Math.abs(minDx) < SNAP_DIST) finalDx += bestDx;
+                      if (Math.abs(minDy) < SNAP_DIST) finalDy += bestDy;
+                      
+                      // Snap to minimal grid to avoid floating point issues
+                      finalDx = Math.round(finalDx / GRID_SIZE) * GRID_SIZE;
+                      finalDy = Math.round(finalDy / GRID_SIZE) * GRID_SIZE;
+                      
                       let isValid = true;
                       for (const m of groupMods) {
-                        const moved = { ...m, x: m.x + dx, y: m.y + dy };
+                        const moved = { ...m, x: m.x + finalDx, y: m.y + finalDy };
                         if (isColliding(moved, unselectedMods)) {
                           isValid = false;
                           break;
                         }
                       }
                       
-                      const dg = { dx, dy, valid: isValid };
+                      const dg = { dx: finalDx, dy: finalDy, valid: isValid };
                       dragGroupRef.current = dg;
                       setDragGroup(dg);
                     }}
