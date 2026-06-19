@@ -32,6 +32,52 @@ const Configurator = () => {
 
   // Keep refs in sync with state for drag handlers (avoids stale closures)
   useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  const assignPlasterIdsToClusters = (modulesList) => {
+    const visited = new Set();
+    let plasterCounter = 0;
+    
+    const getBoundsForList = (mod) => {
+      const dims = getCabinetDimensions(mod.config);
+      const isRot = mod.rotation % 180 !== 0;
+      const w = isRot ? dims.heightPx : dims.widthPx;
+      const h = isRot ? dims.widthPx : dims.heightPx;
+      return { x: mod.x, y: mod.y, w, h };
+    };
+
+    const checkTouching = (m1, m2) => {
+      const b1 = getBoundsForList(m1);
+      const b2 = getBoundsForList(m2);
+      return !(
+        b1.x + b1.w < b2.x ||
+        b1.x > b2.x + b2.w ||
+        b1.y + b1.h < b2.y ||
+        b1.y > b2.y + b2.h
+      );
+    };
+
+    modulesList.forEach(startMod => {
+      if (visited.has(startMod.id)) return;
+      
+      const plasterId = `plaster_restored_${plasterCounter++}_${Math.random().toString(36).substr(2, 5)}`;
+      const queue = [startMod];
+      visited.add(startMod.id);
+      
+      while (queue.length > 0) {
+        const current = queue.shift();
+        current.plasterId = plasterId;
+        
+        modulesList.forEach(other => {
+          if (!visited.has(other.id) && checkTouching(current, other)) {
+            visited.add(other.id);
+            queue.push(other);
+          }
+        });
+      }
+    });
+    
+    return modulesList;
+  };
+
   useEffect(() => {
     const handleHashLoad = () => {
       try {
@@ -48,7 +94,8 @@ const Configurator = () => {
             y: m.y,
             rotation: m.r
           }));
-          setModules(restored);
+          const groupedRestored = assignPlasterIdsToClusters(restored);
+          setModules(groupedRestored);
           window.history.replaceState(null, '', window.location.pathname);
         }
       } catch (e) {
@@ -178,6 +225,7 @@ const Configurator = () => {
 
       let idCounter = Date.now();
       const addedIds = [];
+      const plasterId = `plaster_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
       for (let r = 0; r < addRows; r++) {
          for (let c = 0; c < addCols; c++) {
@@ -185,6 +233,7 @@ const Configurator = () => {
             addedIds.push(newId);
             newModules.push({
               id: newId,
+              plasterId: plasterId,
               config: { ...cabinetConfig },
               x: startX + c * moduleWidth,
               y: startY + r * moduleHeight,
@@ -765,10 +814,27 @@ const Configurator = () => {
                       }
                     }}
                     onPointerDown={(e) => {
-                      if (!selectedIds.includes(module.id)) {
-                        setSelectedIds(prev => [...prev, module.id]);
-                        moduleJustAddedRef.current = module.id;
+                      const isMultiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
+                      const targetPlasterId = module.plasterId;
+                      
+                      const siblingIds = targetPlasterId 
+                        ? modules.filter(m => m.plasterId === targetPlasterId).map(m => m.id)
+                        : [module.id];
+                        
+                      if (isMultiSelect) {
+                        const anySelected = siblingIds.some(id => selectedIds.includes(id));
+                        if (anySelected) {
+                          setSelectedIds(prev => prev.filter(id => !siblingIds.includes(id)));
+                        } else {
+                          setSelectedIds(prev => [...prev, ...siblingIds]);
+                        }
+                      } else {
+                        const isAlreadySelected = siblingIds.every(id => selectedIds.includes(id));
+                        if (!isAlreadySelected) {
+                          setSelectedIds(siblingIds);
+                        }
                       }
+                      moduleJustAddedRef.current = module.id;
                     }}
                     onClick={(e) => {
                       if (isDraggingRef.current) {
@@ -777,11 +843,13 @@ const Configurator = () => {
                       }
                       
                       if (moduleJustAddedRef.current === module.id) {
-                         // Just added on mousedown, do not toggle off
                          moduleJustAddedRef.current = null;
                       } else {
-                         // Toggle off on normal click
-                         setSelectedIds(prev => prev.filter(id => id !== module.id));
+                         const targetPlasterId = module.plasterId;
+                         const siblingIds = targetPlasterId 
+                           ? modules.filter(m => m.plasterId === targetPlasterId).map(m => m.id)
+                           : [module.id];
+                         setSelectedIds(prev => prev.filter(id => !siblingIds.includes(id)));
                       }
                     }}
                     className={`module-item ${selectedIds.includes(module.id) ? 'selected' : ''}`}
