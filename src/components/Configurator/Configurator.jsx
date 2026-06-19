@@ -159,10 +159,12 @@ const Configurator = () => {
       let foundSpot = false;
 
       // Find an empty spot for the entire Plaster block
-      for (let attemptY = 0; attemptY < 100 && !foundSpot; attemptY++) {
-        for (let attemptX = 0; attemptX < 100 && !foundSpot; attemptX++) {
-          const testX = attemptX * GRID_SIZE; // Use GRID_SIZE for placement attempts
-          const testY = attemptY * GRID_SIZE; // Use GRID_SIZE for placement attempts
+      const stepX = moduleWidth;
+      const stepY = moduleHeight;
+      for (let attemptY = 0; attemptY < 50 && !foundSpot; attemptY++) {
+        for (let attemptX = 0; attemptX < 50 && !foundSpot; attemptX++) {
+          const testX = attemptX * stepX;
+          const testY = attemptY * stepY;
           const gridRect = { x: testX, y: testY, width: gridTotalWidth, height: gridTotalHeight, rotation: 0, isGridBlock: true };
           if (!isColliding(gridRect, newModules)) {
             startX = testX;
@@ -450,6 +452,17 @@ const Configurator = () => {
         pp
       };
     }).sort((a,b) => b.count - a.count);
+  };
+
+  const getAspectRatio = (w, h) => {
+    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+    const d = gcd(w, h);
+    if (d === 0) return '';
+    const rw = w/d;
+    const rh = h/d;
+    // Limit displaying huge weird ratios by also showing decimal
+    if (rw > 100 || rh > 100) return `${(w/h).toFixed(2)}:1`;
+    return `${rw}:${rh}`;
   };
 
   return (
@@ -860,6 +873,7 @@ const Configurator = () => {
                 <div style={{ fontSize: '0.95rem', color: '#a1a1aa' }}>Szerokość: <span style={{ color: '#fff', fontWeight: 'bold' }}>{cluster.widthCm} cm</span></div>
                 <div style={{ fontSize: '0.95rem', color: '#a1a1aa' }}>Wysokość: <span style={{ color: '#fff', fontWeight: 'bold' }}>{cluster.heightCm} cm</span></div>
                 <div style={{ fontSize: '0.95rem', color: '#a1a1aa' }}>Rozdzielczość: <span style={{ color: '#fff', fontWeight: 'bold' }}>{cluster.resW} x {cluster.resH} px</span> <span style={{ fontSize: '0.8rem' }}>(P{cluster.pp})</span></div>
+                <div style={{ fontSize: '0.95rem', color: '#a1a1aa' }}>Proporcje: <span style={{ color: '#fff', fontWeight: 'bold' }}>{getAspectRatio(cluster.resW, cluster.resH)}</span></div>
                 <div style={{ fontSize: '0.9rem', color: '#71717a', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>Złożony z {cluster.count} gabinetów</div>
               </div>
             ))}
