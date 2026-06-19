@@ -413,23 +413,39 @@ const Configurator = () => {
     setPan({ x: viewW / 2 - cx * newZoom, y: viewH / 2 - cy * newZoom });
   };
 
-  // Init: center canvas + wheel zoom (passive:false required)
+  // Init: center canvas + wheel zoom/pan (passive:false required)
   useEffect(() => {
     const el = workbenchContainerRef.current;
     if (!el) return;
     setPan({ x: el.clientWidth / 2, y: el.clientHeight / 2 });
     const onWheel = (e) => {
       e.preventDefault();
-      const factor = e.deltaY > 0 ? 0.92 : 1.08;
-      const rect = el.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      setZoom(prevZoom => {
-        const newZoom = Math.min(3, Math.max(0.05, prevZoom * factor));
-        const sf = newZoom / prevZoom;
-        setPan(p => ({ x: mouseX - (mouseX - p.x) * sf, y: mouseY - (mouseY - p.y) * sf }));
-        return newZoom;
-      });
+      
+      const isZoom = e.ctrlKey;
+      
+      if (isZoom) {
+        // Zooming: pinch-to-zoom on trackpad or Ctrl + Scroll wheel
+        const zoomFactor = 1 - e.deltaY * 0.01;
+        const rect = el.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        setZoom(prevZoom => {
+          const newZoom = Math.min(3, Math.max(0.05, prevZoom * zoomFactor));
+          const sf = newZoom / prevZoom;
+          setPan(p => ({ x: mouseX - (mouseX - p.x) * sf, y: mouseY - (mouseY - p.y) * sf }));
+          return newZoom;
+        });
+      } else {
+        // Panning: scroll wheel or two-finger trackpad drag
+        const dx = e.shiftKey ? -e.deltaY : -e.deltaX;
+        const dy = e.shiftKey ? 0 : -e.deltaY;
+        
+        setPan(p => ({
+          x: p.x + dx,
+          y: p.y + dy
+        }));
+      }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
