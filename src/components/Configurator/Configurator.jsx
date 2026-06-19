@@ -4,7 +4,13 @@ import { Plus, RotateCcw, Trash2, Save, Info, Monitor, X, Link, Check } from 'lu
 
 const Configurator = () => {
   const [modules, setModules] = useState([]);
-  const [selectedType, setSelectedType] = useState('96x64');
+  const [cabinetConfig, setCabinetConfig] = useState({
+    pixelPitch: 2.5,
+    ledModW: 320,
+    ledModH: 160,
+    cabCols: 3,
+    cabRows: 4
+  });
   const [isGridVisible, setIsGridVisible] = useState(true);
   const [dragGhost, setDragGhost] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -17,10 +23,15 @@ const Configurator = () => {
   const [addOrientation, setAddOrientation] = useState('horizontal');
   const [selectedIds, setSelectedIds] = useState([]);
   const [dragGroup, setDragGroup] = useState(null); // { dx, dy, valid }
+  const dragGroupRef = useRef(null);
+  const selectedIdsRef = useRef([]);
   const workbenchRef = useRef(null);
   const isDraggingRef = useRef(false);
   const moduleJustAddedRef = useRef(null);
   const [isLinkCopied, setIsLinkCopied] = useState(false);
+
+  // Keep refs in sync with state for drag handlers (avoids stale closures)
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
   useEffect(() => {
     const handleHashLoad = () => {
       try {
@@ -30,7 +41,9 @@ const Configurator = () => {
           const arr = JSON.parse(json);
           const restored = arr.map(m => ({
             id: Math.random().toString(36).substr(2, 9),
-            type: m.t === 'SP' ? '96x64' : '128x48',
+            config: m.c ? { pixelPitch: m.c[0], ledModW: m.c[1], ledModH: m.c[2], cabCols: m.c[3], cabRows: m.c[4] } 
+                        : (m.t === 'SP' ? { pixelPitch: 2.5, ledModW: 320, ledModH: 160, cabCols: 3, cabRows: 4 } 
+                                        : { pixelPitch: 2.5, ledModW: 320, ledModH: 160, cabCols: 4, cabRows: 3 }),
             x: m.x,
             y: m.y,
             rotation: m.r
@@ -48,24 +61,30 @@ const Configurator = () => {
     return () => window.removeEventListener('hashchange', handleHashLoad);
   }, []);
 
-  const GRID_SIZE = 40; // 16cm = 40px
   const CM_TO_PX = 2.5; // 1cm = 2.5px
+  const GRID_SIZE = 2.5; // 1cm grid snap
 
-  const moduleTypes = {
-    '96x64': { width: 96 * CM_TO_PX, height: 64 * CM_TO_PX, name: 'Standard Pro', price: 2000 },
-    '128x48': { width: 128 * CM_TO_PX, height: 48 * CM_TO_PX, name: 'Slim Wide', price: 2000 }
+  const getCabinetDimensions = (config = cabinetConfig) => {
+    const widthCm = (config.ledModW * config.cabCols) / 10;
+    const heightCm = (config.ledModH * config.cabRows) / 10;
+    return {
+      widthCm,
+      heightCm,
+      widthPx: widthCm * CM_TO_PX,
+      heightPx: heightCm * CM_TO_PX
+    };
   };
 
-  const totalPrice = modules.length * 2000;
+  const totalPrice = modules.length * 2000; // Koszt zależy od założeń biznesowych, na razie stały.
 
   const handleShareLink = () => {
     try {
       if (modules.length === 0) return;
       const minified = modules.map(m => ({
-        x: m.x,
-        y: m.y,
+        x: Math.round(m.x),
+        y: Math.round(m.y),
         r: m.rotation,
-        t: m.type === '96x64' ? 'SP' : 'SW'
+        c: [m.config.pixelPitch, m.config.ledModW, m.config.ledModH, m.config.cabCols, m.config.cabRows]
       }));
       const json = JSON.stringify(minified);
       const b64 = btoa(encodeURIComponent(json));
@@ -93,19 +112,24 @@ const Configurator = () => {
   };
 
   const getModuleBounds = (mod) => {
+    const dims = getCabinetDimensions(mod.config || cabinetConfig);
     const isRot = mod.rotation % 180 !== 0;
-    const w = isRot ? moduleTypes[mod.type].height : moduleTypes[mod.type].width;
-    const h = isRot ? moduleTypes[mod.type].width : moduleTypes[mod.type].height;
+    const w = isRot ? dims.heightPx : dims.widthPx;
+    const h = isRot ? dims.widthPx : dims.heightPx;
     return { x: mod.x, y: mod.y, w, h };
   };
 
   const isColliding = (newModBounds, existingModules) => {
-    const isRot = newModBounds.rotation % 180 !== 0;
-    const width = isRot ? moduleTypes[newModBounds.type || selectedType].height : moduleTypes[newModBounds.type || selectedType].width;
-    const height = isRot ? moduleTypes[newModBounds.type || selectedType].width : moduleTypes[newModBounds.type || selectedType].height;
-    // Note: newModBounds can already have width/height if it's a grid rect, so we need to fallback
-    const finalWidth = newModBounds.width || width;
-    const finalHeight = newModBounds.height || height;
+    // newModBounds can already have width/height if it's a grid rect
+    let finalWidth = newModBounds.width;
+    let finalHeight = newModBounds.height;
+    
+    if (!finalWidth || !finalHeight) {
+       const dims = getCabinetDimensions(newModBounds.config || cabinetConfig);
+       const isRot = newModBounds.rotation % 180 !== 0;
+       finalWidth = isRot ? dims.heightPx : dims.widthPx;
+       finalHeight = isRot ? dims.widthPx : dims.heightPx;
+    }
 
     return existingModules.some(mod => {
       if (mod.id === newModBounds.id && !newModBounds.isGridBlock) return false;
@@ -123,10 +147,9 @@ const Configurator = () => {
     setModules(prev => {
       const newModules = [...prev];
       const isAddRotated = addOrientation === 'vertical';
-      const baseWidth = moduleTypes[selectedType].width;
-      const baseHeight = moduleTypes[selectedType].height;
-      const moduleWidth = isAddRotated ? baseHeight : baseWidth;
-      const moduleHeight = isAddRotated ? baseWidth : baseHeight;
+      const dims = getCabinetDimensions(cabinetConfig);
+      const moduleWidth = isAddRotated ? dims.heightPx : dims.widthPx;
+      const moduleHeight = isAddRotated ? dims.widthPx : dims.heightPx;
 
       const gridTotalWidth = addCols * moduleWidth;
       const gridTotalHeight = addRows * moduleHeight;
@@ -158,7 +181,7 @@ const Configurator = () => {
             addedIds.push(newId);
             newModules.push({
               id: newId,
-              type: selectedType,
+              config: { ...cabinetConfig },
               x: startX + c * moduleWidth,
               y: startY + r * moduleHeight,
               rotation: isAddRotated ? 90 : 0,
@@ -184,8 +207,9 @@ const Configurator = () => {
         // Single module rotation (in place)
         const m = selectedMods[0];
         const isRotated = m.rotation % 180 !== 0;
-        const oldW = isRotated ? moduleTypes[m.type].height : moduleTypes[m.type].width;
-        const oldH = isRotated ? moduleTypes[m.type].width : moduleTypes[m.type].height;
+        const dims = getCabinetDimensions(m.config || cabinetConfig);
+        const oldW = isRotated ? dims.heightPx : dims.widthPx;
+        const oldH = isRotated ? dims.widthPx : dims.heightPx;
         
         const newW = oldH;
         const newH = oldW;
@@ -209,16 +233,18 @@ const Configurator = () => {
       // 2. Pivot around the first selected module
       const pivotMod = selectedMods[0];
       const isPivotRotated = pivotMod.rotation % 180 !== 0;
-      const pivotW = isPivotRotated ? moduleTypes[pivotMod.type].height : moduleTypes[pivotMod.type].width;
-      const pivotH = isPivotRotated ? moduleTypes[pivotMod.type].width : moduleTypes[pivotMod.type].height;
+      const dimsPivot = getCabinetDimensions(pivotMod.config || cabinetConfig);
+      const pivotW = isPivotRotated ? dimsPivot.heightPx : dimsPivot.widthPx;
+      const pivotH = isPivotRotated ? dimsPivot.widthPx : dimsPivot.heightPx;
       const cx = pivotMod.x + pivotW / 2;
       const cy = pivotMod.y + pivotH / 2;
 
       // 3. Compute rotated elements
       const updatedGroup = selectedMods.map(m => {
         const isRotated = m.rotation % 180 !== 0;
-        const w = isRotated ? moduleTypes[m.type].height : moduleTypes[m.type].width;
-        const h = isRotated ? moduleTypes[m.type].width : moduleTypes[m.type].height;
+        const dims = getCabinetDimensions(m.config || cabinetConfig);
+        const w = isRotated ? dims.heightPx : dims.widthPx;
+        const h = isRotated ? dims.widthPx : dims.heightPx;
         
         // current center of module
         const mcx = m.x + w / 2;
@@ -409,12 +435,19 @@ const Configurator = () => {
       
       const widthPx = maxR - minX;
       const heightPx = maxB - minY;
+      const pp = cluster[0]?.config?.pixelPitch || cabinetConfig.pixelPitch;
+      
+      const widthCm = Math.round(widthPx / CM_TO_PX);
+      const heightCm = Math.round(heightPx / CM_TO_PX);
       
       return {
         id: index + 1,
         count: cluster.length,
-        widthCm: Math.round((widthPx / GRID_SIZE) * 16),
-        heightCm: Math.round((heightPx / GRID_SIZE) * 16)
+        widthCm,
+        heightCm,
+        resW: Math.round(widthCm * 10 / pp),
+        resH: Math.round(heightCm * 10 / pp),
+        pp
       };
     }).sort((a,b) => b.count - a.count);
   };
@@ -431,25 +464,53 @@ const Configurator = () => {
           {/* Controls Panel */}
           <div className="controls glass">
             <div className="control-group">
-              <label>Typ Modułu</label>
-              <div className="module-selector">
-                {Object.keys(moduleTypes).map(type => (
-                  <button 
-                    key={type}
-                    className={`type-btn ${selectedType === type ? 'active' : ''}`}
-                    onClick={() => setSelectedType(type)}
-                  >
-                    <span className="type-name">{moduleTypes[type].name}</span>
-                    <span className="type-size">{type} cm</span>
-                  </button>
-                ))}
+              <label>Parametry Gabinetu</label>
+              
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: '0.75rem', color: '#a1a1aa' }}>Pixel Pitch (mm)</span>
+                  <input type="number" step="0.1" value={cabinetConfig.pixelPitch} 
+                    onChange={e => setCabinetConfig(p => ({ ...p, pixelPitch: parseFloat(e.target.value) || 2.5 }))}
+                    style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '6px' }} />
+                </div>
               </div>
-            </div>
 
-            <div className="info-box">
-              <div className="info-item">
-                <Info size={16} />
-                <span>Koszt za moduł: 2 000 PLN</span>
+              <span style={{ fontSize: '0.75rem', color: '#a1a1aa', display: 'block', marginBottom: '4px' }}>Rozmiar Modułu LED (mm)</span>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ flex: 1 }}>
+                  <input type="number" value={cabinetConfig.ledModW} placeholder="Szer."
+                    onChange={e => setCabinetConfig(p => ({ ...p, ledModW: parseInt(e.target.value) || 320 }))}
+                    style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '6px' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <input type="number" value={cabinetConfig.ledModH} placeholder="Wys."
+                    onChange={e => setCabinetConfig(p => ({ ...p, ledModH: parseInt(e.target.value) || 160 }))}
+                    style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '6px' }} />
+                </div>
+              </div>
+
+              <span style={{ fontSize: '0.75rem', color: '#a1a1aa', display: 'block', marginBottom: '4px' }}>Układ Gabinetu (kolumny x rzędy modułów)</span>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ flex: 1 }}>
+                  <input type="number" value={cabinetConfig.cabCols} placeholder="Kolumny"
+                    onChange={e => setCabinetConfig(p => ({ ...p, cabCols: parseInt(e.target.value) || 1 }))}
+                    style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '6px' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <input type="number" value={cabinetConfig.cabRows} placeholder="Rzędy"
+                    onChange={e => setCabinetConfig(p => ({ ...p, cabRows: parseInt(e.target.value) || 1 }))}
+                    style={{ width: '100%', padding: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '6px' }} />
+                </div>
+              </div>
+              
+              <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                <div style={{ fontSize: '0.85rem', color: '#60a5fa', marginBottom: '4px' }}>Wynikowy Plaster (Gabinet):</div>
+                <div style={{ color: 'white', fontWeight: 'bold' }}>
+                  {getCabinetDimensions().widthCm} cm x {getCabinetDimensions().heightCm} cm
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#a1a1aa' }}>
+                  Rozdzielczość: {Math.round(getCabinetDimensions().widthCm * 10 / cabinetConfig.pixelPitch)} x {Math.round(getCabinetDimensions().heightCm * 10 / cabinetConfig.pixelPitch)} px
+                </div>
               </div>
             </div>
 
@@ -586,7 +647,8 @@ const Configurator = () => {
                     dragMomentum={false}
                     onDrag={(e, info) => {
                       isDraggingRef.current = true;
-                      if (!selectedIds.includes(module.id)) return; // Should not happen if configured right
+                      const curSelected = selectedIdsRef.current;
+                      if (!curSelected.includes(module.id)) return;
                       
                       const newX = Math.round((module.x + (info.offset.x / zoom)) / GRID_SIZE) * GRID_SIZE;
                       const newY = Math.round((module.y + (info.offset.y / zoom)) / GRID_SIZE) * GRID_SIZE;
@@ -594,8 +656,8 @@ const Configurator = () => {
                       const dx = newX - module.x;
                       const dy = newY - module.y;
                       
-                      const unselectedMods = modules.filter(m => !selectedIds.includes(m.id));
-                      const groupMods = modules.filter(m => selectedIds.includes(m.id));
+                      const unselectedMods = modules.filter(m => !curSelected.includes(m.id));
+                      const groupMods = modules.filter(m => curSelected.includes(m.id));
                       
                       let isValid = true;
                       for (const m of groupMods) {
@@ -606,21 +668,26 @@ const Configurator = () => {
                         }
                       }
                       
-                      setDragGroup({ dx, dy, valid: isValid });
+                      const dg = { dx, dy, valid: isValid };
+                      dragGroupRef.current = dg;
+                      setDragGroup(dg);
                     }}
                     onDragEnd={(e, info) => {
                       setTimeout(() => { isDraggingRef.current = false; }, 100);
-                      if (!dragGroup) return; // sometimes drag doesn't fire nicely
-                      // If it did fire, finish up:
-                      const finalDx = dragGroup.dx;
-                      const finalDy = dragGroup.dy;
-                      const isValid = dragGroup.valid;
-                      
+                      const dg = dragGroupRef.current;
+                      dragGroupRef.current = null;
                       setDragGroup(null);
+                      
+                      if (!dg) return;
+                      
+                      const finalDx = dg.dx;
+                      const finalDy = dg.dy;
+                      const isValid = dg.valid;
+                      const curSelected = selectedIdsRef.current;
                       
                       if (isValid && (finalDx !== 0 || finalDy !== 0)) {
                         setModules(prev => prev.map(m => {
-                          if (selectedIds.includes(m.id)) {
+                          if (curSelected.includes(m.id)) {
                             return { ...m, x: m.x + finalDx, y: m.y + finalDy };
                           }
                           return m;
@@ -628,7 +695,7 @@ const Configurator = () => {
                       } else {
                         // Revert visual jump or micro-drags that didn't cross the grid threshold
                         setModules(prev => prev.map(m => {
-                          if (selectedIds.includes(m.id)) {
+                          if (curSelected.includes(m.id)) {
                             return { ...m, collisionKey: (m.collisionKey || 0) + 1 };
                           }
                           return m;
@@ -657,8 +724,8 @@ const Configurator = () => {
                     }}
                     className={`module-item ${selectedIds.includes(module.id) ? 'selected' : ''}`}
                     style={{
-                      width: `${module.rotation % 180 !== 0 ? moduleTypes[module.type].height : moduleTypes[module.type].width}px`,
-                      height: `${module.rotation % 180 !== 0 ? moduleTypes[module.type].width : moduleTypes[module.type].height}px`,
+                      width: `${module.rotation % 180 !== 0 ? getCabinetDimensions(module.config || cabinetConfig).heightPx : getCabinetDimensions(module.config || cabinetConfig).widthPx}px`,
+                      height: `${module.rotation % 180 !== 0 ? getCabinetDimensions(module.config || cabinetConfig).widthPx : getCabinetDimensions(module.config || cabinetConfig).heightPx}px`,
                       position: 'absolute',
                       left: 0,
                       top: 0,
@@ -666,7 +733,7 @@ const Configurator = () => {
                     }}
                   >
                     <div className="module-content" style={{ transform: `rotate(${module.rotation}deg)` }}>
-                      <span className="module-label">{module.type}</span>
+                      <span className="module-label">P{module.config ? module.config.pixelPitch : cabinetConfig.pixelPitch}</span>
                     </div>
                   </motion.div>
                 ))}
@@ -675,8 +742,9 @@ const Configurator = () => {
               {/* Group Drag Feedback */}
               {dragGroup && modules.filter(m => selectedIds.includes(m.id)).map(m => {
                 const isRotated = m.rotation % 180 !== 0;
-                const width = isRotated ? moduleTypes[m.type].height : moduleTypes[m.type].width;
-                const height = isRotated ? moduleTypes[m.type].width : moduleTypes[m.type].height;
+                const dims = getCabinetDimensions(m.config || cabinetConfig);
+                const width = isRotated ? dims.heightPx : dims.widthPx;
+                const height = isRotated ? dims.widthPx : dims.heightPx;
                 return (
                   <div
                     key={`ghost-${m.id}`}
@@ -703,7 +771,7 @@ const Configurator = () => {
                       textShadow: '0 1px 3px rgba(0,0,0,1)'
                     }}
                   >
-                    {m.type}
+                    P{m.config ? m.config.pixelPitch : cabinetConfig.pixelPitch}
                   </div>
                 );
               })}
@@ -749,7 +817,8 @@ const Configurator = () => {
                 <div style={{ fontWeight: '700', color: '#3b82f6', fontSize: '1.1rem' }}>Ekran {cluster.id}</div>
                 <div style={{ fontSize: '0.95rem', color: '#a1a1aa' }}>Szerokość: <span style={{ color: '#fff', fontWeight: 'bold' }}>{cluster.widthCm} cm</span></div>
                 <div style={{ fontSize: '0.95rem', color: '#a1a1aa' }}>Wysokość: <span style={{ color: '#fff', fontWeight: 'bold' }}>{cluster.heightCm} cm</span></div>
-                <div style={{ fontSize: '0.9rem', color: '#71717a', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>Złożony z {cluster.count} moduł(ów)</div>
+                <div style={{ fontSize: '0.95rem', color: '#a1a1aa' }}>Rozdzielczość: <span style={{ color: '#fff', fontWeight: 'bold' }}>{cluster.resW} x {cluster.resH} px</span> <span style={{ fontSize: '0.8rem' }}>(P{cluster.pp})</span></div>
+                <div style={{ fontSize: '0.9rem', color: '#71717a', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>Złożony z {cluster.count} gabinetów</div>
               </div>
             ))}
             {modules.length === 0 && <span style={{ color: '#71717a' }}>Dodaj moduły, aby zobaczyć dokładne wymiary gotowych ekranów.</span>}
