@@ -709,8 +709,7 @@ const Configurator = () => {
                     animate={{ 
                       opacity: (dragGroup && selectedIds.includes(module.id)) ? 0 : 1, 
                       scale: 1,
-                      x: module.x,
-                      y: module.y
+                      ...((dragGroup && selectedIds.includes(module.id)) ? {} : { x: module.x, y: module.y })
                     }}
                     transition={{
                       default: { type: "spring", stiffness: 400, damping: 30 },
